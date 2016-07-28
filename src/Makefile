@@ -412,7 +412,7 @@ uninstall:
 		rm -f $(MANDIR)/man$(MANSECTION)/$(MANFILE).gz ; \
 	fi
 
-.PHONY: clean install
+.PHONY: clean install dkms
 
 clean:
 ifeq ($(KOBJ),$(KSRC))
@@ -421,3 +421,26 @@ else
 	$(MAKE) -C $(KSRC) O=$(KOBJ) SUBDIRS=$(shell pwd) clean
 endif
 	rm -rf $(TARGET) $(TARGET:.ko=.o) $(TARGET:.ko=.mod.c) $(TARGET:.ko=.mod.o) $(CFILES:.c=.o) $(MANFILE).gz .*cmd .tmp_versions
+
+VERSION=$(shell grep Version ../ixgbe.spec | sed 's/://g' | awk '{print $$NF}')
+
+dkms:
+	echo MAKE='"make -C src/ KERNELDIR=/lib/modules/$${kernelver}/build"' > dkms.conf
+	echo CLEAN='"make -C src/ clean"' >> dkms.conf
+	echo BUILT_MODULE_NAME=$(DRIVER_NAME) >> dkms.conf
+	echo BUILT_MODULE_LOCATION=src/ >> dkms.conf
+	echo DEST_MODULE_LOCATION="/updates" >> dkms.conf
+	echo PACKAGE_NAME=$(DRIVER_NAME)-dkms >> dkms.conf
+	echo PACKAGE_VERSION=$(VERSION) >> dkms.conf
+	echo REMAKE_INITRD=yes >> dkms.conf
+	DKMS_ROOT=/usr/src
+	DKMS_MOD_ROOT=$(DKMS_ROOT)/$(DRIVER_NAME)-$(VERSION)
+	DKMS_MOD_SRC=$(DKMS_MOD_ROOT)/src
+	sudo mkdir -p $(DKMS_MOD_SRC)
+	sudo cp dkms.conf $(DKMS_MOD_ROOT)
+	sudo cp *.c $(DKMS_MOD_SRC)
+	sudo cp *.h $(DKMS_MOD_SRC)
+	sudo cp Makefile $(DKMS_MOD_SRC)
+	dkms add -m $(DRIVER_NAME) -v $(VERSION)
+	dkms build -m $(DRIVER_NAME) -v $(VERSION)
+	dkms mkdeb -m $(DRIVER_NAME) -v $(VERSION) --source-only
